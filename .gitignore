@@ -1,0 +1,39 @@
+# IDEs
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# Java and Maven
+**/target/
+**/build/
+.gradle/
+*.class
+*.log
+
+# Node / React
+**/node_modules/
+**/dist/
+**/.next/
+**/coverage/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+**/application-local.properties
+**/application-local.yml
+**/application-local.yaml
+**/application-secret.properties
+**/application-secret.yml
+*.pem
+*.key
+
+# Operating system
+.DS_Store
+Thumbs.db
+
+# Runtime
+*.pid

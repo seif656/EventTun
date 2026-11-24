@@ -12,10 +12,9 @@ public class OpenApiConfig {
     public OpenAPI ticketServiceOpenApi() {
         return new OpenAPI().info(new Info()
                 .title("EventTun - Ticket Service")
-                .version("0.0.1")
+                .version("0.0.2")
                 .description("Emission, consultation et validation des billets numeriques. "
-                        + "Contrat de la validation 1 : les endpoints sont documentes, "
-                        + "la logique metier sera implementee aux validations suivantes "
-                        + "(les appels renvoient pour l'instant 501 Not Implemented)."));
+                        + "Validation 2 : les six operations sont implementees. "
+                        + "Les erreurs sont renvoyees au format Problem Details (application/problem+json)."));
     }
 }

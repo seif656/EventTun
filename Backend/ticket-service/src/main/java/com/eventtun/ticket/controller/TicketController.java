@@ -6,6 +6,7 @@ import com.eventtun.ticket.dto.UpdateTicketStatusRequest;
 import com.eventtun.ticket.dto.ValidateTicketRequest;
 import com.eventtun.ticket.model.Ticket;
 import com.eventtun.ticket.model.TicketValidation;
+import com.eventtun.ticket.service.IssueResult;
 import com.eventtun.ticket.service.TicketService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -18,11 +19,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 /**
  * Controller REST du Ticket Service.
  *
- * VALIDATION 1 : les endpoints sont declares et documentes (Swagger/OpenAPI).
- * La logique metier est reportee : chaque methode renvoie 501 Not Implemented.
+ * VALIDATION 2 : les six operations sont implementees (la logique est dans TicketService).
+ * Les erreurs sont traduites en Problem Details par GlobalExceptionHandler.
  */
 @RestController
 @RequestMapping("/api/tickets")
@@ -49,8 +52,10 @@ public class TicketController {
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetailResponse.class)))
     @ApiResponse(responseCode = "409", description = "Billets deja emis avec un contenu different",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetailResponse.class)))
-    public ResponseEntity<Void> issueTickets(@Valid @RequestBody IssueTicketsRequest request) {
-        return notImplemented();
+    public ResponseEntity<List<Ticket>> issueTickets(@Valid @RequestBody IssueTicketsRequest request) {
+        IssueResult result = ticketService.issueTickets(request);
+        return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
+                .body(result.tickets());
     }
 
     @GetMapping("/{id}")
@@ -59,8 +64,8 @@ public class TicketController {
             content = @Content(schema = @Schema(implementation = Ticket.class)))
     @ApiResponse(responseCode = "404", description = "Billet introuvable",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetailResponse.class)))
-    public ResponseEntity<Void> getTicket(@PathVariable String id) {
-        return notImplemented();
+    public ResponseEntity<Ticket> getTicket(@PathVariable String id) {
+        return ResponseEntity.ok(ticketService.getById(id));
     }
 
     @GetMapping
@@ -68,9 +73,11 @@ public class TicketController {
             description = "Filtres en query string : ownerId (billets d'un utilisateur) et/ou orderId (billets d'une commande).")
     @ApiResponse(responseCode = "200", description = "Liste (eventuellement vide)",
             content = @Content(array = @ArraySchema(schema = @Schema(implementation = Ticket.class))))
-    public ResponseEntity<Void> searchTickets(@RequestParam(required = false) Long ownerId,
-                                              @RequestParam(required = false) Long orderId) {
-        return notImplemented();
+    @ApiResponse(responseCode = "400", description = "Aucun filtre fourni (ownerId ou orderId requis)",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetailResponse.class)))
+    public ResponseEntity<List<Ticket>> searchTickets(@RequestParam(required = false) Long ownerId,
+                                                      @RequestParam(required = false) Long orderId) {
+        return ResponseEntity.ok(ticketService.search(ownerId, orderId));
     }
 
     @PostMapping("/{id}/validations")
@@ -83,9 +90,10 @@ public class TicketController {
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetailResponse.class)))
     @ApiResponse(responseCode = "409", description = "Billet deja utilise ou annule",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetailResponse.class)))
-    public ResponseEntity<Void> validateTicket(@PathVariable String id,
-                                               @Valid @RequestBody ValidateTicketRequest request) {
-        return notImplemented();
+    public ResponseEntity<TicketValidation> validateTicket(@PathVariable String id,
+                                                           @Valid @RequestBody ValidateTicketRequest request) {
+        TicketValidation validation = ticketService.validate(id, request.getControllerId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(validation);
     }
 
     @GetMapping("/{id}/validations")
@@ -94,8 +102,8 @@ public class TicketController {
             content = @Content(array = @ArraySchema(schema = @Schema(implementation = TicketValidation.class))))
     @ApiResponse(responseCode = "404", description = "Billet introuvable",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetailResponse.class)))
-    public ResponseEntity<Void> getValidations(@PathVariable String id) {
-        return notImplemented();
+    public ResponseEntity<List<TicketValidation>> getValidations(@PathVariable String id) {
+        return ResponseEntity.ok(ticketService.history(id));
     }
 
     @PatchMapping("/{id}/status")
@@ -104,16 +112,14 @@ public class TicketController {
                     + "avec GET /api/tickets?orderId=. Un billet USED ne peut pas etre annule (409).")
     @ApiResponse(responseCode = "200", description = "Billet annule",
             content = @Content(schema = @Schema(implementation = Ticket.class)))
+    @ApiResponse(responseCode = "400", description = "Statut demande invalide (seul CANCELLED est autorise)",
+            content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetailResponse.class)))
     @ApiResponse(responseCode = "404", description = "Billet introuvable",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetailResponse.class)))
     @ApiResponse(responseCode = "409", description = "Billet deja utilise",
             content = @Content(mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetailResponse.class)))
-    public ResponseEntity<Void> updateStatus(@PathVariable String id,
-                                             @Valid @RequestBody UpdateTicketStatusRequest request) {
-        return notImplemented();
-    }
-
-    private ResponseEntity<Void> notImplemented() {
-        return ResponseEntity.status(HttpStatus.NOT_IMPLEMENTED).build();
+    public ResponseEntity<Ticket> updateStatus(@PathVariable String id,
+                                               @Valid @RequestBody UpdateTicketStatusRequest request) {
+        return ResponseEntity.ok(ticketService.cancel(id, request.getStatus()));
     }
 }

@@ -1,4 +1,19 @@
 package tn.eventtun.eventservice.repository;
-import tn.eventtun.eventservice.model.SeatReservation;
+
 import org.springframework.data.jpa.repository.JpaRepository;
-public interface SeatReservationRepository extends JpaRepository<SeatReservation, Long> {}
+import org.springframework.stereotype.Repository;
+import tn.eventtun.eventservice.model.SeatReservation;
+
+import java.util.List;
+import java.util.Optional;
+
+@Repository
+public interface SeatReservationRepository
+    extends JpaRepository<SeatReservation, Long> {
+
+    Optional<SeatReservation> findByOrderIdAndCategoryId(
+        Long orderId, Long categoryId);
+
+    List<SeatReservation> findByCategoryIdIn(
+        List<Long> categoryIds);
+}

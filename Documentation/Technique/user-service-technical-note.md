@@ -1,5 +1,5 @@
 
-# 9. User Service — User and Club Management
+# 9. User Service â€” User and Club Management
 
 ## 9.1. Overview and Responsibilities
 
@@ -193,6 +193,7 @@ User Service exposes two API resource groups:
 | GET | /api/clubs | List clubs |
 | GET | /api/clubs/{id} | Retrieve club |
 | PUT | /api/clubs/{id} | Update club |
+| DELETE | /api/clubs/{id} | Delete club |
 
 ### HTTP Response Codes
 
@@ -212,8 +213,7 @@ Complete API specification:
 [User Service OpenAPI Contract](../OpenAPI/user-service.yaml)
 
 The OpenAPI contract describes the intended API.
-Business operations will be implemented during
-the development phase.
+User and Club operations are implemented.
 
 ## 9.7. Interactions with Other Microservices
 
@@ -370,15 +370,17 @@ authentication responsibilities.
 
 ### Remaining Development
 
-- Implement service business operations.
-- Implement controller HTTP methods.
-- Add request validation and error handling.
+- Integrate Club references with Event Service when available.
+- Coordinate club deletion with future event references.
+- Enforce access control when authentication is integrated.
 - Integrate authentication and authorization.
 - Configure the target MySQL database.
 - Implement interservice communications.
 - Execute functional and integration tests.
 
-The current application provides the technical
-foundation for the User Service. The planned
-REST operations are documented but are not yet
-implemented as functional business endpoints.
+User endpoints now implement create, list, lookup, full profile update and
+block/reactivate. Validation and Problem Details errors are implemented, and
+Swagger UI is available. No delete endpoint is provided.
+Club endpoints implement create, list, lookup, update and delete. Owners must
+exist and be organizers; creation timestamps are managed by the server.
+See the service README for defaults, PUT behavior, and test instructions.

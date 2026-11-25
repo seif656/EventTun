@@ -8,6 +8,16 @@ info:
     REST API for managing user profiles and university clubs.
     Authentication is handled separately by Keycloak
     in the target architecture.
+    User and Club endpoints are implemented.
+    New profiles default to ACTIVE status and STUDENT role.
+    Email addresses are stored lowercase and must be unique ignoring case.
+    PUT replaces profile fields, defaults an omitted role to STUDENT, clears
+    an omitted keycloakSubject, and preserves status. Use PATCH to block or
+    reactivate a profile. User deletion is not supported.
+    Clubs support create, list, lookup, replacement and deletion. Club owners
+    must exist (404 otherwise) and have the ORGANIZER role (409 otherwise).
+    Club creation time is server-generated and preserved on update.
+    Authentication and authorization are not yet enforced.
 
 servers:
   - url: http://localhost:8081
@@ -34,6 +44,12 @@ paths:
       responses:
         '201':
           description: User created successfully
+          headers:
+            Location:
+              description: URL of the created user
+              schema:
+                type: string
+                format: uri
           content:
             application/json:
               schema:
@@ -145,6 +161,12 @@ paths:
       responses:
         '201':
           description: Club created
+          headers:
+            Location:
+              description: URL of the created club
+              schema:
+                type: string
+                format: uri
           content:
             application/json:
               schema:
@@ -209,6 +231,21 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '404':
           $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    delete:
+      tags: [Clubs]
+      summary: Delete a club
+      operationId: deleteClub
+      responses:
+        '204':
+          description: Club deleted; no response body
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
 
 components:
 
@@ -256,20 +293,27 @@ components:
       properties:
         firstName:
           type: string
+          minLength: 1
+          maxLength: 255
           example: Ahmed
         lastName:
           type: string
+          minLength: 1
+          maxLength: 255
           example: Ben Ali
         email:
           type: string
           format: email
+          maxLength: 255
           example: ahmed@example.com
         keycloakSubject:
           type: string
           nullable: true
+          maxLength: 255
         role:
           type: string
           enum: [STUDENT, ORGANIZER, CONTROLLER, ADMIN]
+          default: STUDENT
 
     Club:
       type: object
@@ -296,6 +340,8 @@ components:
       properties:
         name:
           type: string
+          minLength: 1
+          maxLength: 255
           example: Robotics Club
         description:
           type: string
@@ -303,6 +349,7 @@ components:
         ownerId:
           type: integer
           format: int64
+          minimum: 1
           example: 1
 
     Problem:

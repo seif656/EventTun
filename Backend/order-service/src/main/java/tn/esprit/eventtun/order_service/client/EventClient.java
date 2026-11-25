@@ -1,18 +1,24 @@
-
 package tn.esprit.eventtun.order_service.client;
 
 import tn.esprit.eventtun.order_service.client.ExternalServiceDtos.ReservationRequest;
-import tn.esprit.eventtun.order_service.client.ExternalServiceDtos.ReservationResponse;
-
-import java.util.List;
+import tn.esprit.eventtun.order_service.client.ExternalServiceDtos.SeatReservationResponse;
+import tn.esprit.eventtun.order_service.client.ExternalServiceDtos.ReservationStatusUpdateRequest;
 
 public interface EventClient {
 
-    ReservationResponse reserveSeats(
-            List<ReservationRequest> items
+    SeatReservationResponse reserveSeats(
+        Long categoryId,
+        ReservationRequest request
     );
 
-    boolean confirmReservation(Long reservationId);
+    SeatReservationResponse confirmReservation(
+        Long categoryId,
+        Long orderId,
+        ReservationStatusUpdateRequest request
+    );
 
-    boolean releaseReservation(Long reservationId);
+    void releaseReservation(
+        Long categoryId,
+        Long orderId
+    );
 }

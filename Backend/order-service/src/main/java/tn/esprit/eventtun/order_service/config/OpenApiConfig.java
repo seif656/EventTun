@@ -13,11 +13,11 @@ public class OpenApiConfig {
     public OpenAPI orderServiceOpenAPI() {
 
         return new OpenAPI()
-                .info(new Info()
-                        .title("EventTun - Order Service API")
-                        .version("1.0.0")
-                        .description(
-                                "Microservice de gestion des commandes EventTun"
-                        ));
+            .info(new Info()
+                .title("EventTun - Order Service API")
+                .version("1.0.0")
+                .description(
+                    "Microservice de gestion des commandes EventTun"
+                ));
     }
 }

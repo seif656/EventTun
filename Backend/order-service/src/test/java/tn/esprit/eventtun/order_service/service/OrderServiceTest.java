@@ -39,16 +39,16 @@ class OrderServiceTest {
     void testCreateLocalOrder() {
 
         CreateOrderRequest request = new CreateOrderRequest(
-                1L, 10L,
-                List.of(new OrderItemRequest(2L, 2))
+            1L, 10L,
+            List.of(new OrderItemRequest(2L, 2))
         );
 
         when(orderRepository.save(any(Order.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+            .thenAnswer(invocation -> invocation.getArgument(0));
 
         OrderResponse result = orderService.createLocalOrder(
-                request,
-                List.of(new BigDecimal("25.00"))
+            request,
+            List.of(new BigDecimal("25.00"))
         );
 
         assertEquals(1L, result.userId());
@@ -65,13 +65,13 @@ class OrderServiceTest {
     void testCreateLocalOrderWithInvalidPrices() {
 
         CreateOrderRequest request = new CreateOrderRequest(
-                1L, 10L,
-                List.of(new OrderItemRequest(2L, 2))
+            1L, 10L,
+            List.of(new OrderItemRequest(2L, 2))
         );
 
         assertThrows(
-                IllegalArgumentException.class,
-                () -> orderService.createLocalOrder(request, List.of())
+            IllegalArgumentException.class,
+            () -> orderService.createLocalOrder(request, List.of())
         );
 
         verify(orderRepository, never()).save(any(Order.class));
@@ -82,16 +82,16 @@ class OrderServiceTest {
     void testCreateLocalOrderWithNegativePrice() {
 
         CreateOrderRequest request = new CreateOrderRequest(
-                1L, 10L,
-                List.of(new OrderItemRequest(2L, 2))
+            1L, 10L,
+            List.of(new OrderItemRequest(2L, 2))
         );
 
         assertThrows(
-                IllegalArgumentException.class,
-                () -> orderService.createLocalOrder(
-                        request,
-                        List.of(new BigDecimal("-10.00"))
-                )
+            IllegalArgumentException.class,
+            () -> orderService.createLocalOrder(
+                request,
+                List.of(new BigDecimal("-10.00"))
+            )
         );
 
         verify(orderRepository, never()).save(any(Order.class));
@@ -104,7 +104,7 @@ class OrderServiceTest {
         Order order = createTestOrder();
 
         when(orderRepository.findById(1L))
-                .thenReturn(Optional.of(order));
+            .thenReturn(Optional.of(order));
 
         OrderResponse result = orderService.getOrderById(1L);
 
@@ -121,11 +121,11 @@ class OrderServiceTest {
     void testGetOrderByIdNotFound() {
 
         when(orderRepository.findById(99L))
-                .thenReturn(Optional.empty());
+            .thenReturn(Optional.empty());
 
         assertThrows(
-                RuntimeException.class,
-                () -> orderService.getOrderById(99L)
+            RuntimeException.class,
+            () -> orderService.getOrderById(99L)
         );
     }
 
@@ -136,10 +136,10 @@ class OrderServiceTest {
         Order order = createTestOrder();
 
         when(orderRepository.searchOrders(1L, OrderStatus.PENDING))
-                .thenReturn(List.of(order));
+            .thenReturn(List.of(order));
 
         List<OrderResponse> result = orderService.getOrders(
-                1L, OrderStatus.PENDING
+            1L, OrderStatus.PENDING
         );
 
         assertEquals(1, result.size());
@@ -156,18 +156,18 @@ class OrderServiceTest {
         Order order = createTestOrder();
 
         when(orderRepository.findById(1L))
-                .thenReturn(Optional.of(order));
+            .thenReturn(Optional.of(order));
 
         List<OrderItemResponse> result =
-                orderService.getOrderItems(1L);
+            orderService.getOrderItems(1L);
 
         assertEquals(1, result.size());
         assertEquals(10L, result.get(0).eventId());
         assertEquals(2L, result.get(0).categoryId());
         assertEquals(2, result.get(0).quantity());
         assertEquals(
-                new BigDecimal("25.00"),
-                result.get(0).unitPrice()
+            new BigDecimal("25.00"),
+            result.get(0).unitPrice()
         );
     }
 
@@ -178,10 +178,10 @@ class OrderServiceTest {
         Order order = createTestOrder();
 
         when(orderRepository.findById(1L))
-                .thenReturn(Optional.of(order));
+            .thenReturn(Optional.of(order));
 
         when(orderRepository.save(any(Order.class)))
-                .thenAnswer(invocation -> invocation.getArgument(0));
+            .thenAnswer(invocation -> invocation.getArgument(0));
 
         OrderResponse result = orderService.cancelOrder(1L);
 
@@ -198,11 +198,11 @@ class OrderServiceTest {
         order.setStatus(OrderStatus.CONFIRMED);
 
         when(orderRepository.findById(1L))
-                .thenReturn(Optional.of(order));
+            .thenReturn(Optional.of(order));
 
         assertThrows(
-                IllegalStateException.class,
-                () -> orderService.cancelOrder(1L)
+            IllegalStateException.class,
+            () -> orderService.cancelOrder(1L)
         );
 
         verify(orderRepository, never()).save(any(Order.class));

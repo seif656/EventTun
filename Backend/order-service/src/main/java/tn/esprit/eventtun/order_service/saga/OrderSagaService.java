@@ -1,6 +1,7 @@
-
 package tn.esprit.eventtun.order_service.saga;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import tn.esprit.eventtun.order_service.client.UserClient;
@@ -11,14 +12,19 @@ import tn.esprit.eventtun.order_service.client.TicketClient;
 import tn.esprit.eventtun.order_service.client.ExternalServiceDtos.*;
 import tn.esprit.eventtun.order_service.dto.OrderDtos.CreateOrderRequest;
 import tn.esprit.eventtun.order_service.enums.OrderStatus;
+import tn.esprit.eventtun.order_service.enums.ReservationStatus;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.HashMap;
 
 @Service
 public class OrderSagaService {
+
+    private static final Logger log =
+        LoggerFactory.getLogger(OrderSagaService.class);
 
     private final UserClient userClient;
     private final EventClient eventClient;
@@ -26,10 +32,10 @@ public class OrderSagaService {
     private final TicketClient ticketClient;
 
     public OrderSagaService(
-            UserClient userClient,
-            EventClient eventClient,
-            PaymentClient paymentClient,
-            TicketClient ticketClient) {
+        UserClient userClient,
+        EventClient eventClient,
+        PaymentClient paymentClient,
+        TicketClient ticketClient) {
 
         this.userClient = userClient;
         this.eventClient = eventClient;
@@ -37,346 +43,499 @@ public class OrderSagaService {
         this.ticketClient = ticketClient;
     }
 
-    // Résultat final de la Saga
     public record SagaResult(
-            Long orderId,
-            OrderStatus status,
-            BigDecimal totalAmount,
-            Long reservationId,
-            Long paymentId,
-            List<Long> ticketIds,
-            List<ReservationItem> reservedItems,
-            String message
+        Long orderId,
+        OrderStatus status,
+        BigDecimal totalAmount,
+        Long reservationId,
+        Long paymentId,
+        List<Long> ticketIds,
+        List<SeatReservationResponse> reservedItems,
+        String message
     ) {}
 
-    // Exécution du processus d'achat
-    public SagaResult execute(
-            Long orderId,
-            CreateOrderRequest request) {
+    // Exécution de la Saga
+    public SagaResult execute(Long orderId, CreateOrderRequest request) {
+
+        log.info("Début Saga : orderId={}", orderId);
 
         // ÉTAPE 1 : Vérifier l'utilisateur (M1)
         UserInfo user = userClient.getUser(request.userId());
 
         if (user == null || !user.exists() || user.blocked()) {
+            log.warn("Utilisateur inexistant ou bloqué : userId={}", request.userId());
+
             return result(
-                    orderId,
-                    OrderStatus.REJECTED,
-                    BigDecimal.ZERO,
-                    null,
-                    null,
-                    List.of(),
-                    "Utilisateur inexistant ou bloqué"
+                orderId,
+                OrderStatus.REJECTED,
+                BigDecimal.ZERO,
+                null,
+                null,
+                List.of(),
+                List.of(),
+                "Utilisateur inexistant ou bloqué"
             );
         }
 
-        // ÉTAPE 2 : Réserver les places (M2)
-        List<ReservationRequest> reservationRequests =
-                request.items().stream()
-                        .map(item -> new ReservationRequest(
-                                request.eventId(),
-                                item.categoryId(),
-                                item.quantity()
-                        ))
-                        .toList();
+        // ÉTAPE 2 : Regrouper les quantités par catégorie
+        Map<Long, Integer> requestedQuantities = new LinkedHashMap<>();
 
-        ReservationResponse reservation =
-                eventClient.reserveSeats(reservationRequests);
+        request.items().forEach(item ->
+            requestedQuantities.merge(
+                item.categoryId(),
+                item.quantity(),
+                Integer::sum
+            )
+        );
 
-        if (reservation == null
-                || !reservation.successful()
-                || reservation.reservationId() == null) {
+        // ÉTAPE 3 : Réserver chaque catégorie auprès de M2
+        List<SeatReservationResponse> reservedItems = new ArrayList<>();
 
-            return result(
+        for (Map.Entry<Long, Integer> entry : requestedQuantities.entrySet()) {
+
+            Long categoryId = entry.getKey();
+            Integer quantity = entry.getValue();
+
+            try {
+                log.info(
+                    "Réservation demandée : orderId={}, categoryId={}, quantity={}",
+                    orderId, categoryId, quantity
+                );
+
+                SeatReservationResponse reservation = eventClient.reserveSeats(
+                    categoryId,
+                    new ReservationRequest(orderId, quantity)
+                );
+
+                if (reservation == null
+                    || reservation.id() == null
+                    || reservation.categoryId() == null
+                    || reservation.quantity() == null
+                    || reservation.unitPrice() == null) {
+
+                    log.error("Réponse de réservation invalide : categoryId={}", categoryId);
+
+                    boolean released = releaseReservations(reservedItems, orderId);
+
+                    return result(
+                        orderId,
+                        released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                        BigDecimal.ZERO,
+                        firstReservationId(reservedItems),
+                        null,
+                        List.of(),
+                        reservedItems,
+                        "La réservation des places a échoué"
+                    );
+                }
+
+                if (!categoryId.equals(reservation.categoryId())
+                    || !quantity.equals(reservation.quantity())
+                    || reservation.status() != ReservationStatus.HELD) {
+
+                    log.error("Informations de réservation invalides : {}", reservation);
+
+                    reservedItems.add(reservation);
+
+                    boolean released = releaseReservations(reservedItems, orderId);
+
+                    return result(
+                        orderId,
+                        released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                        BigDecimal.ZERO,
+                        firstReservationId(reservedItems),
+                        null,
+                        List.of(),
+                        reservedItems,
+                        "Les informations de réservation sont invalides"
+                    );
+                }
+
+                reservedItems.add(reservation);
+
+                log.info(
+                    "Réservation réussie : reservationId={}, categoryId={}, status={}",
+                    reservation.id(),
+                    categoryId,
+                    reservation.status()
+                );
+
+            } catch (RuntimeException exception) {
+
+                log.error(
+                    "ERREUR RÉSERVATION : orderId={}, categoryId={}",
                     orderId,
-                    OrderStatus.REJECTED,
+                    categoryId,
+                    exception
+                );
+
+                boolean released = releaseReservations(reservedItems, orderId);
+
+                return result(
+                    orderId,
+                    released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
                     BigDecimal.ZERO,
-                    null,
+                    firstReservationId(reservedItems),
                     null,
                     List.of(),
-                    "La réservation des places a échoué"
-            );
+                    reservedItems,
+                    "Erreur lors de la réservation auprès de Event Service"
+                );
+            }
         }
 
-        Long reservationId = reservation.reservationId();
-
-        // ÉTAPE 3 : Récupérer les prix officiels de M2
+        // ÉTAPE 4 : Calculer le montant avec les prix de M2
         BigDecimal totalAmount;
 
         try {
-            totalAmount = calculateTotal(request, reservation);
+            totalAmount = calculateTotal(requestedQuantities, reservedItems);
+
+            log.info("Montant total calculé : orderId={}, amount={}", orderId, totalAmount);
+
         } catch (RuntimeException exception) {
 
-            boolean released = releaseReservation(reservationId);
+            log.error("ERREUR CALCUL MONTANT : orderId={}", orderId, exception);
+
+            boolean released = releaseReservations(reservedItems, orderId);
 
             return result(
-                    orderId,
-                    released
-                            ? OrderStatus.REJECTED
-                            : OrderStatus.COMPENSATION_PENDING,
-                    BigDecimal.ZERO,
-                    reservationId,
-                    null,
-                    List.of(),
-                    reservation.items(),
-                    "Prix ou quantités de réservation invalides"
+                orderId,
+                released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                BigDecimal.ZERO,
+                firstReservationId(reservedItems),
+                null,
+                List.of(),
+                reservedItems,
+                "Prix ou quantités de réservation invalides"
             );
         }
 
-        // ÉTAPE 4 : Effectuer le paiement (M4)
+        // ÉTAPE 5 : Effectuer le paiement (M4)
         PaymentResponse payment;
 
         try {
+            log.info("Paiement demandé : orderId={}, amount={}", orderId, totalAmount);
+
             payment = paymentClient.pay(
-                    new PaymentRequest(orderId, totalAmount)
+                new PaymentRequest(orderId, totalAmount)
             );
+
         } catch (RuntimeException exception) {
 
-            boolean released = releaseReservation(reservationId);
+            log.error("ERREUR APPEL PAIEMENT : orderId={}", orderId, exception);
+
+            boolean released = releaseReservations(reservedItems, orderId);
 
             return result(
-                    orderId,
-                    released
-                            ? OrderStatus.REJECTED
-                            : OrderStatus.COMPENSATION_PENDING,
-                    totalAmount,
-                    reservationId,
-                    null,
-                    List.of(),
-                    reservation.items(),
-                    "Erreur lors de l'appel au service de paiement"
+                orderId,
+                released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                totalAmount,
+                firstReservationId(reservedItems),
+                null,
+                List.of(),
+                reservedItems,
+                "Erreur lors de l'appel au service de paiement"
             );
         }
 
         if (payment == null
-                || !payment.successful()
-                || payment.paymentId() == null) {
+            || !payment.successful()
+            || payment.paymentId() == null) {
 
-            boolean released = releaseReservation(reservationId);
+            log.error("PAIEMENT REFUSÉ : orderId={}", orderId);
+
+            boolean released = releaseReservations(reservedItems, orderId);
 
             return result(
-                    orderId,
-                    released
-                            ? OrderStatus.REJECTED
-                            : OrderStatus.COMPENSATION_PENDING,
-                    totalAmount,
-                    reservationId,
-                    null,
-                    List.of(),
-                    reservation.items(),
-                    "Paiement refusé"
+                orderId,
+                released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                totalAmount,
+                firstReservationId(reservedItems),
+                null,
+                List.of(),
+                reservedItems,
+                "Paiement refusé"
             );
         }
 
         Long paymentId = payment.paymentId();
 
-        // ÉTAPE 5 : Confirmer la réservation (M2)
-        boolean reservationConfirmed;
+        log.info("Paiement accepté : orderId={}, paymentId={}", orderId, paymentId);
 
-        try {
-            reservationConfirmed =
-                    eventClient.confirmReservation(reservationId);
-        } catch (RuntimeException exception) {
-            reservationConfirmed = false;
+        // ÉTAPE 6 : Confirmer chaque réservation auprès de M2
+        boolean allConfirmed = true;
+
+        for (SeatReservationResponse item : reservedItems) {
+
+            try {
+                log.info(
+                    "Confirmation demandée : orderId={}, categoryId={}",
+                    orderId,
+                    item.categoryId()
+                );
+
+                SeatReservationResponse confirmation =
+                    eventClient.confirmReservation(
+                        item.categoryId(),
+                        orderId,
+                        new ReservationStatusUpdateRequest(
+                            ReservationStatus.CONFIRMED
+                        )
+                    );
+
+                log.info(
+                    "Réponse confirmation : orderId={}, categoryId={}, status={}",
+                    orderId,
+                    item.categoryId(),
+                    confirmation == null ? "NULL" : confirmation.status()
+                );
+
+                if (confirmation == null
+                    || confirmation.status() != ReservationStatus.CONFIRMED) {
+
+                    log.error(
+                        "Confirmation refusée : orderId={}, categoryId={}",
+                        orderId,
+                        item.categoryId()
+                    );
+
+                    allConfirmed = false;
+                    break;
+                }
+
+            } catch (RuntimeException exception) {
+
+                log.error(
+                    "ERREUR CONFIRMATION : orderId={}, categoryId={}",
+                    orderId,
+                    item.categoryId(),
+                    exception
+                );
+
+                allConfirmed = false;
+                break;
+            }
         }
 
-        if (!reservationConfirmed) {
+        if (!allConfirmed) {
 
-            boolean compensated =
-                    compensate(reservationId, paymentId);
+            log.error("Échec confirmation : lancement compensation, orderId={}", orderId);
+
+            boolean compensated = compensate(
+                reservedItems,
+                orderId,
+                paymentId
+            );
 
             return result(
-                    orderId,
-                    compensated
-                            ? OrderStatus.REJECTED
-                            : OrderStatus.COMPENSATION_PENDING,
-                    totalAmount,
-                    reservationId,
-                    paymentId,
-                    List.of(),
-                    reservation.items(),
-                    "Confirmation de réservation échouée"
+                orderId,
+                compensated ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                totalAmount,
+                firstReservationId(reservedItems),
+                paymentId,
+                List.of(),
+                reservedItems,
+                "Confirmation de réservation échouée"
             );
         }
 
-        // ÉTAPE 6 : Émettre les billets (M5)
+        // ÉTAPE 7 : Générer les billets (M5)
         TicketResponse tickets;
 
         try {
+            log.info("Émission des billets demandée : orderId={}", orderId);
+
             tickets = ticketClient.issueTickets(
-                    new TicketRequest(
-                            orderId,
-                            request.userId(),
-                            request.eventId()
-                    )
+                new TicketRequest(
+                    orderId,
+                    request.userId(),
+                    request.eventId()
+                )
             );
+
         } catch (RuntimeException exception) {
+
+            log.error("ERREUR ÉMISSION BILLETS : orderId={}", orderId, exception);
+
             tickets = null;
         }
 
         if (tickets == null || !tickets.successful()) {
 
-            boolean compensated =
-                    compensate(reservationId, paymentId);
+            log.error("Émission des billets échouée : orderId={}", orderId);
+
+            boolean compensated = compensate(
+                reservedItems,
+                orderId,
+                paymentId
+            );
 
             return result(
-                    orderId,
-                    compensated
-                            ? OrderStatus.REJECTED
-                            : OrderStatus.COMPENSATION_PENDING,
-                    totalAmount,
-                    reservationId,
-                    paymentId,
-                    List.of(),
-                    reservation.items(),
-                    "Émission des billets échouée"
+                orderId,
+                compensated ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                totalAmount,
+                firstReservationId(reservedItems),
+                paymentId,
+                List.of(),
+                reservedItems,
+                "Émission des billets échouée"
             );
         }
 
-        // ÉTAPE 7 : Tout est réussi
+        // ÉTAPE 8 : Succès de la Saga
+        log.info("Saga réussie : orderId={}", orderId);
+
         return result(
-                orderId,
-                OrderStatus.CONFIRMED,
-                totalAmount,
-                reservationId,
-                paymentId,
-                tickets.ticketIds() == null
-                        ? List.of()
-                        : tickets.ticketIds(),
-                reservation.items(),
-                "Commande confirmée avec succès"
+            orderId,
+            OrderStatus.CONFIRMED,
+            totalAmount,
+            firstReservationId(reservedItems),
+            paymentId,
+            tickets.ticketIds() == null ? List.of() : tickets.ticketIds(),
+            reservedItems,
+            "Commande confirmée avec succès"
         );
     }
 
-    // Calcul du montant à partir des prix fournis par M2
+    // Calcul du montant à partir des prix officiels de M2
     private BigDecimal calculateTotal(
-            CreateOrderRequest request,
-            ReservationResponse reservation) {
+        Map<Long, Integer> requestedQuantities,
+        List<SeatReservationResponse> reservedItems) {
 
-        if (reservation.items() == null
-                || reservation.items().isEmpty()) {
-
+        if (reservedItems == null || reservedItems.isEmpty()) {
             throw new IllegalStateException(
-                    "Aucun prix retourné par Event Service"
+                "Aucune réservation retournée par Event Service"
             );
         }
 
-        Map<Long, Integer> requestedQuantities = new HashMap<>();
-
-        request.items().forEach(item ->
-                requestedQuantities.merge(
-                        item.categoryId(),
-                        item.quantity(),
-                        Integer::sum
-                )
-        );
-
-        Map<Long, Integer> reservedQuantities = new HashMap<>();
+        Map<Long, Integer> reservedQuantities = new LinkedHashMap<>();
 
         BigDecimal total = BigDecimal.ZERO;
 
-        for (ReservationItem item : reservation.items()) {
+        for (SeatReservationResponse item : reservedItems) {
 
             if (item.categoryId() == null
-                    || item.unitPrice() == null
-                    || item.unitPrice().compareTo(BigDecimal.ZERO) < 0
-                    || item.quantity() == null
-                    || item.quantity() <= 0) {
+                || item.quantity() == null
+                || item.quantity() <= 0
+                || item.unitPrice() == null
+                || item.unitPrice().compareTo(BigDecimal.ZERO) < 0) {
 
-                throw new IllegalStateException(
-                        "Prix ou quantité invalide"
-                );
+                throw new IllegalStateException("Prix ou quantité invalide");
             }
 
             reservedQuantities.merge(
-                    item.categoryId(),
-                    item.quantity(),
-                    Integer::sum
+                item.categoryId(),
+                item.quantity(),
+                Integer::sum
             );
 
             total = total.add(
-                    item.unitPrice().multiply(
-                            BigDecimal.valueOf(item.quantity())
-                    )
+                item.unitPrice().multiply(
+                    BigDecimal.valueOf(item.quantity())
+                )
             );
         }
 
         if (!requestedQuantities.equals(reservedQuantities)) {
             throw new IllegalStateException(
-                    "Les quantités réservées ne correspondent pas à la commande"
+                "Les quantités réservées ne correspondent pas à la commande"
             );
         }
 
         return total;
     }
 
-    // Libérer les places
-    private boolean releaseReservation(Long reservationId) {
-        try {
-            return eventClient.releaseReservation(reservationId);
-        } catch (RuntimeException exception) {
-            return false;
+    // Libérer toutes les réservations
+    private boolean releaseReservations(
+        List<SeatReservationResponse> reservedItems,
+        Long orderId) {
+
+        boolean allReleased = true;
+
+        for (SeatReservationResponse item : reservedItems) {
+
+            try {
+                log.info(
+                    "Libération réservation : orderId={}, categoryId={}",
+                    orderId,
+                    item.categoryId()
+                );
+
+                eventClient.releaseReservation(item.categoryId(), orderId);
+
+            } catch (RuntimeException exception) {
+
+                log.error(
+                    "ERREUR LIBÉRATION : orderId={}, categoryId={}",
+                    orderId,
+                    item.categoryId(),
+                    exception
+                );
+
+                allReleased = false;
+            }
         }
+
+        return allReleased;
     }
 
-    // Rembourser et libérer les places
+    // Rembourser et libérer les réservations
     private boolean compensate(
-            Long reservationId,
-            Long paymentId) {
+        List<SeatReservationResponse> reservedItems,
+        Long orderId,
+        Long paymentId) {
 
         boolean refundOk;
 
         try {
+            log.info("Remboursement demandé : paymentId={}", paymentId);
+
             refundOk = paymentClient.refund(paymentId);
+
+            log.info("Résultat remboursement : paymentId={}, success={}", paymentId, refundOk);
+
         } catch (RuntimeException exception) {
+
+            log.error("ERREUR REMBOURSEMENT : paymentId={}", paymentId, exception);
+
             refundOk = false;
         }
 
-        boolean releaseOk = releaseReservation(reservationId);
+        boolean releaseOk = releaseReservations(reservedItems, orderId);
 
         return refundOk && releaseOk;
     }
 
-    // Création du résultat de la Saga
-    private SagaResult result(
-            Long orderId,
-            OrderStatus status,
-            BigDecimal amount,
-            Long reservationId,
-            Long paymentId,
-            List<Long> ticketIds,
-            String message) {
+    // Conserver le premier ID pour compatibilité avec SagaResult
+    private Long firstReservationId(List<SeatReservationResponse> items) {
 
-        return result(
-                orderId,
-                status,
-                amount,
-                reservationId,
-                paymentId,
-                ticketIds,
-                List.of(),
-                message
-        );
+        if (items == null || items.isEmpty()) {
+            return null;
+        }
+
+        return items.get(0).id();
     }
 
+    // Création du résultat final
     private SagaResult result(
-            Long orderId,
-            OrderStatus status,
-            BigDecimal amount,
-            Long reservationId,
-            Long paymentId,
-            List<Long> ticketIds,
-            List<ReservationItem> reservedItems,
-            String message) {
+        Long orderId,
+        OrderStatus status,
+        BigDecimal amount,
+        Long reservationId,
+        Long paymentId,
+        List<Long> ticketIds,
+        List<SeatReservationResponse> reservedItems,
+        String message) {
 
         return new SagaResult(
-                orderId,
-                status,
-                amount,
-                reservationId,
-                paymentId,
-                ticketIds,
-                reservedItems,
-                message
+            orderId,
+            status,
+            amount,
+            reservationId,
+            paymentId,
+            ticketIds,
+            reservedItems,
+            message
         );
     }
 }

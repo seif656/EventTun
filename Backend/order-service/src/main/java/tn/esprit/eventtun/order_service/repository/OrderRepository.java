@@ -25,7 +25,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
         ORDER BY o.createdAt DESC
     """)
     List<Order> searchOrders(
-            @Param("userId") Long userId,
-            @Param("status") OrderStatus status
+        @Param("userId") Long userId,
+        @Param("status") OrderStatus status
     );
 }

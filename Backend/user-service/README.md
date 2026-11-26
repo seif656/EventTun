@@ -1,7 +1,23 @@
 # User Service
 
-Spring Boot / Java 17 service on port 8081, using an in-memory H2 database.
-Data is reset when the application stops.
+Spring Boot / Java 17 service on port 8081, using MySQL on port 3306.
+Users and clubs are stored in users_db and survive application restarts.
+Automated tests use a separate in-memory H2 database, not users_db.
+
+## Database setup
+
+Start MySQL in XAMPP and create the database once:
+
+```sql
+CREATE DATABASE IF NOT EXISTS users_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+```
+
+Local defaults are root with an empty password. If your setup differs, set
+DB_USERNAME and DB_PASSWORD in your terminal or IDE run configuration.
+DB_URL can override jdbc:mysql://localhost:3306/users_db.
+Do not commit passwords. Hibernate creates/updates the tables on startup.
+XAMPP may identify its database engine as MariaDB; check the server version
+when troubleshooting connectivity.
 
 ## Run and test
 

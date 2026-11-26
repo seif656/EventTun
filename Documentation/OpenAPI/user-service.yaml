@@ -1,0 +1,393 @@
+
+openapi: 3.0.3
+
+info:
+  title: EventTun - User Service API
+  version: 1.0.0
+  description: |
+    REST API for managing user profiles and university clubs.
+    Authentication is handled separately by Keycloak
+    in the target architecture.
+    User and Club endpoints are implemented.
+    New profiles default to ACTIVE status and STUDENT role.
+    Email addresses are stored lowercase and must be unique ignoring case.
+    PUT replaces profile fields, defaults an omitted role to STUDENT, clears
+    an omitted keycloakSubject, and preserves status. Use PATCH to block or
+    reactivate a profile. User deletion is not supported.
+    Clubs support create, list, lookup, replacement and deletion. Club owners
+    must exist (404 otherwise) and have the ORGANIZER role (409 otherwise).
+    Club creation time is server-generated and preserved on update.
+    Authentication and authorization are not yet enforced.
+
+servers:
+  - url: http://localhost:8081
+
+tags:
+  - name: Users
+    description: User profile management
+  - name: Clubs
+    description: University club management
+
+paths:
+
+  /api/users:
+    post:
+      tags: [Users]
+      summary: Create a user profile
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInput'
+      responses:
+        '201':
+          description: User created successfully
+          headers:
+            Location:
+              description: URL of the created user
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    get:
+      tags: [Users]
+      summary: List all users
+      operationId: getAllUsers
+      description: Intended for administrators.
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+
+  /api/users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      operationId: getUserById
+      responses:
+        '200':
+          description: User found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Users]
+      summary: Update user profile
+      description: |
+        Full profile replacement preserves account status. A user owning clubs
+        must retain ORGANIZER; otherwise returns 409. An omitted role defaults
+        to STUDENT, so club owners must explicitly include ORGANIZER.
+      operationId: updateUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInput'
+      responses:
+        '200':
+          description: User updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/users/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+
+    patch:
+      tags: [Users]
+      summary: Block or reactivate a user
+      operationId: updateUserStatus
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [ACTIVE, BLOCKED]
+      responses:
+        '200':
+          description: Status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/clubs:
+    post:
+      tags: [Clubs]
+      summary: Create a university club
+      operationId: createClub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClubInput'
+      responses:
+        '201':
+          description: Club created
+          headers:
+            Location:
+              description: URL of the created club
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Club'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    get:
+      tags: [Clubs]
+      summary: List all clubs
+      operationId: getAllClubs
+      responses:
+        '200':
+          description: List of clubs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Club'
+
+  /api/clubs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/Id'
+
+    get:
+      tags: [Clubs]
+      summary: Get club by ID
+      operationId: getClubById
+      responses:
+        '200':
+          description: Club found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Club'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags: [Clubs]
+      summary: Update a club
+      operationId: updateClub
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClubInput'
+      responses:
+        '200':
+          description: Club updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Club'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+    delete:
+      tags: [Clubs]
+      summary: Delete a club
+      operationId: deleteClub
+      responses:
+        '204':
+          description: Club deleted; no response body
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+
+components:
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      description: Resource identifier
+      schema:
+        type: integer
+        format: int64
+        minimum: 1
+
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        firstName:
+          type: string
+        lastName:
+          type: string
+        email:
+          type: string
+          format: email
+        keycloakSubject:
+          type: string
+          nullable: true
+        role:
+          type: string
+          enum: [STUDENT, ORGANIZER, CONTROLLER, ADMIN]
+        status:
+          type: string
+          enum: [ACTIVE, BLOCKED]
+
+    UserInput:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - email
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: Ahmed
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: Ben Ali
+        email:
+          type: string
+          format: email
+          maxLength: 255
+          example: ahmed@example.com
+        keycloakSubject:
+          type: string
+          nullable: true
+          maxLength: 255
+        role:
+          type: string
+          enum: [STUDENT, ORGANIZER, CONTROLLER, ADMIN]
+          default: STUDENT
+
+    Club:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        description:
+          type: string
+        ownerId:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+
+    ClubInput:
+      type: object
+      required:
+        - name
+        - ownerId
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 255
+          example: Robotics Club
+        description:
+          type: string
+          example: University robotics and innovation club
+        ownerId:
+          type: integer
+          format: int64
+          minimum: 1
+          example: 1
+
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+    Conflict:
+      description: Resource conflict
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'

@@ -95,6 +95,10 @@ paths:
     put:
       tags: [Users]
       summary: Update user profile
+      description: |
+        Full profile replacement preserves account status. A user owning clubs
+        must retain ORGANIZER; otherwise returns 409. An omitted role defaults
+        to STUDENT, so club owners must explicitly include ORGANIZER.
       operationId: updateUser
       requestBody:
         required: true

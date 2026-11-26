@@ -62,7 +62,8 @@ Spring Boot application using Java 17 and Maven.
 | Build tool | Maven |
 | REST API | Spring Web |
 | Persistence | Spring Data JPA |
-| Local database | H2 |
+| Application database | MySQL-compatible XAMPP database on port 3306 |
+| Automated test database | H2 |
 | Target database | MySQL |
 | API specification | OpenAPI 3.0 |
 | Monitoring | Spring Boot Actuator |
@@ -92,8 +93,8 @@ MySQL is the target relational database because
 user profiles and clubs require structured data,
 unique identifiers and relational consistency.
 
-H2 is currently used for local development and
-application startup verification.
+MySQL is configured for application runs. Users and clubs were verified to
+survive application restart. H2 is isolated to automated tests.
 
 ## 9.4. Data Model and Entities
 
@@ -357,7 +358,8 @@ authentication responsibilities.
 - UserRepository and ClubRepository.
 - UserService and ClubService interfaces.
 - UserController and ClubController skeletons.
-- H2 database configuration.
+- MySQL application configuration and isolated H2 test configuration.
+- Eureka client configuration for user-service (live registry check pending).
 - Spring Boot Actuator configuration.
 
 ### Prepared Documentation
@@ -374,7 +376,7 @@ authentication responsibilities.
 - Coordinate club deletion with future event references.
 - Enforce access control when authentication is integrated.
 - Integrate authentication and authorization.
-- Configure the target MySQL database.
+- Verify live Eureka registration with the shared discovery-service.
 - Implement interservice communications.
 - Execute functional and integration tests.
 
@@ -384,3 +386,8 @@ Swagger UI is available. No delete endpoint is provided.
 Club endpoints implement create, list, lookup, update and delete. Owners must
 exist and be organizers; creation timestamps are managed by the server.
 See the service README for defaults, PUT behavior, and test instructions.
+
+### Club owner role protection
+
+Updating a user to a non-ORGANIZER role returns 409 while they own clubs.
+Transfer or delete those clubs first. Keeping ORGANIZER permits profile edits.

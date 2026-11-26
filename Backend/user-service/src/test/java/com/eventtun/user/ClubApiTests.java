@@ -87,4 +87,33 @@ class ClubApiTests {
             .andExpect(jsonPath("$.paths['/api/clubs'].post").exists())
             .andExpect(jsonPath("$.paths['/api/clubs/{id}'].delete").exists());
     }
+
+    @Test void ownerRoleCannotChangeUntilAllClubsAreTransferred() throws Exception {
+        long clubId = create();
+        long secondClub = create();
+        String profile = mapper.writeValueAsString(java.util.Map.of(
+            "firstName", "Club", "lastName", "Owner", "email", "organizer@example.com"));
+        // An omitted role defaults to STUDENT, so it must also be rejected.
+        mvc.perform(put("/api/users/" + ownerId).contentType(MediaType.APPLICATION_JSON).content(profile))
+            .andExpect(status().isConflict());
+        for (Role role : new Role[]{Role.STUDENT, Role.CONTROLLER, Role.ADMIN}) {
+            String change = mapper.writeValueAsString(java.util.Map.of(
+                "firstName", "Club", "lastName", "Owner", "email", "organizer@example.com", "role", role.name()));
+            mvc.perform(put("/api/users/" + ownerId).contentType(MediaType.APPLICATION_JSON).content(change))
+                .andExpect(status().isConflict());
+        }
+        assertEquals(Role.ORGANIZER, users.findById(ownerId).orElseThrow().getRole());
+        String sameRole = mapper.writeValueAsString(java.util.Map.of(
+            "firstName", "Updated", "lastName", "Owner", "email", "organizer@example.com", "role", "ORGANIZER"));
+        mvc.perform(put("/api/users/" + ownerId).contentType(MediaType.APPLICATION_JSON).content(sameRole))
+            .andExpect(status().isOk());
+        long newOwner = owner(Role.ORGANIZER, "new-owner@example.com");
+        mvc.perform(put("/api/clubs/" + clubId).contentType(MediaType.APPLICATION_JSON).content(input("Transferred", newOwner)))
+            .andExpect(status().isOk());
+        mvc.perform(put("/api/users/" + ownerId).contentType(MediaType.APPLICATION_JSON).content(profile))
+            .andExpect(status().isConflict());
+        mvc.perform(delete("/api/clubs/" + secondClub)).andExpect(status().isNoContent());
+        mvc.perform(put("/api/users/" + ownerId).contentType(MediaType.APPLICATION_JSON).content(profile))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.role").value("STUDENT"));
+    }
 }

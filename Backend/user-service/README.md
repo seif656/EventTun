@@ -89,3 +89,31 @@ invalid input returns 400. createdAt is assigned by the server and preserved
 on update. PUT replaces the profile, including ownerId; omitted description
 is cleared. DELETE removes the club, not its owner. Event-service references
 will need coordination once that service is implemented.
+
+## Eureka registration (Chapter 4)
+
+Start the team's discovery-service on port 8761, then start User Service.
+The Eureka client starter registers automatically as user-service on port 8081.
+Open http://localhost:8761 and look for USER-SERVICE with status UP.
+The client also sends heartbeats and fetches the registry.
+
+Default registry: http://localhost:8761/eureka/.
+Override EUREKA_SERVER_URL when the shared server runs on another computer.
+The API still runs on 8081 and the database on 3306.
+Automated tests disable Eureka and continue to use H2.
+Event and Order appear only when their applications are running and connected
+to the same Eureka server. Registration does not implement their API clients.
+
+## Club owner role rule
+
+A user who owns clubs must keep the ORGANIZER role. PUT /api/users/{id}
+returns 409 if another role is requested, including when role is omitted
+and defaults to STUDENT. Transfer or delete all their clubs first.
+Profile updates keeping ORGANIZER and account blocking remain available.
+
+## Integration status
+
+MySQL persistence has been verified across an application restart. Eureka
+client configuration is ready; live registration against the shared server
+must be verified when discovery-service is running. Order's real user lookup
+and Keycloak authorization are separate team integration tasks.

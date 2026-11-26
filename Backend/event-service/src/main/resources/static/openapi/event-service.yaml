@@ -1,0 +1,735 @@
+openapi: 3.0.3
+info:
+  title: EventTun — Event Service (M2)
+  version: 1.3.0
+  description: 'Contrat OpenAPI de conception du microservice Event Service (M2), conforme au plan final EventTun
+    Validation 1 : 11 opérations REST documentées. Le squelette Spring Boot et les entités JPA sont présents ; la
+    logique métier des opérations n''est pas encore implémentée. Base H2 locale, MySQL events_db cible. Les intégrations
+    interservices sont prévues pour les validations suivantes.'
+servers:
+  - url: http://localhost:8082
+    description: Serveur local Spring Boot ; endpoints métier documentés mais non implémentés
+tags:
+  - name: Événements
+  - name: Catégories
+  - name: Réservations
+paths:
+  /api/events:
+    post:
+      tags:
+        - Événements
+      summary: Créer un événement brouillon
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400':
+          description: Données invalides
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Erreur interne
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventCreateRequest'
+    get:
+      tags:
+        - Événements
+      summary: Lister les événements (catalogue)
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EventList'
+        '500':
+          description: Erreur interne
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '400':
+          description: Filtre invalide
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/EventStatus'
+        - name: from
+          in: query
+          required: false
+          description: Date de début minimale
+          schema:
+            type: string
+            format: date-time
+        - name: q
+          in: query
+          required: false
+          description: Recherche textuelle
+          schema:
+            type: string
+  /api/events/{id}:
+    get:
+      tags:
+        - Événements
+      summary: Consulter un événement
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '404':
+          description: Ressource introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Erreur interne
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Identifiant id
+    put:
+      tags:
+        - Événements
+      summary: Modifier un événement
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400':
+          description: Données invalides
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Ressource introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Conflit métier
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Erreur interne
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Identifiant id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventUpdateRequest'
+  /api/events/{id}/status:
+    patch:
+      tags:
+        - Événements
+      summary: Changer le statut d’un événement
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Event'
+        '400':
+          description: Données invalides
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Ressource introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Conflit métier
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Erreur interne
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Identifiant id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EventStatusUpdateRequest'
+            example:
+              status: PUBLISHED
+  /api/events/{id}/categories:
+    post:
+      tags:
+        - Catégories
+      summary: Créer une catégorie de billets
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketCategory'
+        '400':
+          description: Données invalides
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Ressource introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Erreur interne
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Identifiant id
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketCategoryCreateRequest'
+    get:
+      tags:
+        - Catégories
+      summary: Lister les catégories d’un événement
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryList'
+        '404':
+          description: Ressource introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Erreur interne
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+          description: Identifiant id
+  /api/categories/{id}/reservations:
+    post:
+      tags:
+        - Réservations
+      summary: Réserver des places pour une commande (idempotent par commande et catégorie)
+      responses:
+        '201':
+          description: Créé
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeatReservation'
+              example:
+                id: 501
+                orderId: 1001
+                quantity: 2
+                unitPrice: 15.0
+                status: HELD
+                createdAt: '2026-11-16T12:05:00'
+                categoryId: 12
+        '400':
+          description: Données invalides
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Ressource introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Conflit métier
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Erreur interne
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '200':
+          description: Réservation existante (rejeu identique)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeatReservation'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationCreateRequest'
+      description: 'Premier appel: 201. Rejeu identique: 200 avec réservation existante. Même commande/catégorie
+        avec quantité différente: 409. Stock vérifié atomiquement lors de l’implémentation.'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Identifiant de la catégorie
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+  /api/categories/{id}/reservations/{orderId}:
+    delete:
+      tags:
+        - Réservations
+      summary: Libérer les places d’une commande
+      responses:
+        '204':
+          description: Places libérées ou déjà libérées (aucun contenu)
+        '404':
+          description: Ressource introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Erreur interne
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      description: 'Compensation possible depuis HELD ou CONFIRMED; restauration du stock une seule fois. Appels
+        répétés: 204.'
+  /api/categories/{id}/reservations/{orderId}/status:
+    patch:
+      tags:
+        - Réservations
+      summary: Confirmer une réservation (HELD vers CONFIRMED)
+      responses:
+        '200':
+          description: Opération réussie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SeatReservation'
+        '404':
+          description: Ressource introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Conflit métier
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Erreur interne
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      description: 'Confirmation idempotente : 200 pour une réservation confirmée ou déjà confirmée, 409 si RELEASED.'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReservationStatusUpdateRequest'
+            example:
+              status: CONFIRMED
+  /api/events/{id}/reservations:
+    get:
+      tags:
+        - Réservations
+      summary: Consulter les réservations d'un événement
+      operationId: listEventReservations
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+            minimum: 1
+      responses:
+        '200':
+          description: Liste des reservations de l'evenement
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SeatReservation'
+        '404':
+          description: Evenement introuvable
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+components:
+  schemas:
+    EventStatus:
+      type: string
+      enum:
+        - DRAFT
+        - PUBLISHED
+        - CANCELLED
+    ReservationStatus:
+      type: string
+      enum:
+        - HELD
+        - CONFIRMED
+        - RELEASED
+    EventCreateRequest:
+      type: object
+      properties:
+        clubId:
+          type: integer
+          format: int64
+          minimum: 1
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+      required:
+        - clubId
+        - title
+        - location
+        - startDate
+        - endDate
+    EventUpdateRequest:
+      type: object
+      properties:
+        clubId:
+          type: integer
+          format: int64
+          minimum: 1
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+      required:
+        - clubId
+        - title
+        - location
+        - startDate
+        - endDate
+    Event:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        clubId:
+          type: integer
+          format: int64
+          minimum: 1
+        title:
+          type: string
+        description:
+          type: string
+        location:
+          type: string
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        status:
+          $ref: '#/components/schemas/EventStatus'
+      required:
+        - id
+        - clubId
+        - title
+        - startDate
+        - endDate
+        - status
+    TicketCategoryCreateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        price:
+          type: number
+          format: double
+          minimum: 0
+          description: Montant décimal ; BigDecimal côté Java
+        capacity:
+          type: integer
+          format: int32
+          minimum: 1
+      required:
+        - name
+        - price
+        - capacity
+    TicketCategory:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        eventId:
+          type: integer
+          format: int64
+          minimum: 1
+        name:
+          type: string
+        price:
+          type: number
+          format: double
+          minimum: 0
+          description: Montant décimal ; BigDecimal côté Java
+        capacity:
+          type: integer
+          format: int32
+          minimum: 1
+        availableQuantity:
+          type: integer
+          format: int32
+          minimum: 0
+      required:
+        - id
+        - eventId
+        - name
+        - price
+        - capacity
+        - availableQuantity
+    SeatReservation:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        orderId:
+          type: integer
+          format: int64
+          minimum: 1
+        quantity:
+          type: integer
+          format: int32
+          minimum: 1
+        status:
+          $ref: '#/components/schemas/ReservationStatus'
+        createdAt:
+          type: string
+          format: date-time
+        unitPrice:
+          type: number
+          minimum: 0
+          description: Prix unitaire dans la réponse API, transmis à M3 pour OrderItem ; ce champ ne fait pas partie
+            des attributs JPA du diagramme de classes validé.
+        categoryId:
+          type: integer
+          format: int64
+          minimum: 1
+      required:
+        - id
+        - orderId
+        - categoryId
+        - quantity
+        - status
+        - createdAt
+        - unitPrice
+    EventList:
+      type: array
+      items:
+        $ref: '#/components/schemas/Event'
+    CategoryList:
+      type: array
+      items:
+        $ref: '#/components/schemas/TicketCategory'
+    EventStatusUpdateRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          $ref: '#/components/schemas/EventStatus'
+    ReservationCreateRequest:
+      type: object
+      required:
+        - orderId
+        - quantity
+      properties:
+        orderId:
+          type: integer
+          format: int64
+          minimum: 1
+        quantity:
+          type: integer
+          minimum: 1
+    ProblemDetails:
+      type: object
+      description: RFC 7807 / Problem Details
+      required:
+        - type
+        - title
+        - status
+        - detail
+        - instance
+      properties:
+        type:
+          type: string
+          example: about:blank
+        title:
+          type: string
+          example: Conflict
+        status:
+          type: integer
+          example: 409
+        detail:
+          type: string
+          example: Places insuffisantes ou réservation incompatible
+        instance:
+          type: string
+          example: /api/categories/12/reservations
+    ReservationStatusUpdateRequest:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - CONFIRMED
+          description: Seule la confirmation est autorisée via cette opération.

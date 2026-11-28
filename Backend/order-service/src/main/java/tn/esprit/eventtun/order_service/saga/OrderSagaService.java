@@ -1,3 +1,4 @@
+
 package tn.esprit.eventtun.order_service.saga;
 
 import org.slf4j.Logger;
@@ -49,7 +50,7 @@ public class OrderSagaService {
         BigDecimal totalAmount,
         Long reservationId,
         Long paymentId,
-        List<Long> ticketIds,
+        List<String> ticketIds,
         List<SeatReservationResponse> reservedItems,
         String message
     ) {}
@@ -63,7 +64,10 @@ public class OrderSagaService {
         UserInfo user = userClient.getUser(request.userId());
 
         if (user == null || !user.exists() || user.blocked()) {
-            log.warn("Utilisateur inexistant ou bloqué : userId={}", request.userId());
+            log.warn(
+                "Utilisateur inexistant ou bloqué : userId={}",
+                request.userId()
+            );
 
             return result(
                 orderId,
@@ -87,6 +91,12 @@ public class OrderSagaService {
                 Integer::sum
             )
         );
+
+        // Quantité totale de billets demandée à M5
+        int totalQuantity = requestedQuantities.values()
+            .stream()
+            .mapToInt(Integer::intValue)
+            .sum();
 
         // ÉTAPE 3 : Réserver chaque catégorie auprès de M2
         List<SeatReservationResponse> reservedItems = new ArrayList<>();
@@ -113,13 +123,20 @@ public class OrderSagaService {
                     || reservation.quantity() == null
                     || reservation.unitPrice() == null) {
 
-                    log.error("Réponse de réservation invalide : categoryId={}", categoryId);
+                    log.error(
+                        "Réponse de réservation invalide : categoryId={}",
+                        categoryId
+                    );
 
-                    boolean released = releaseReservations(reservedItems, orderId);
+                    boolean released = releaseReservations(
+                        reservedItems, orderId
+                    );
 
                     return result(
                         orderId,
-                        released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                        released
+                            ? OrderStatus.REJECTED
+                            : OrderStatus.COMPENSATION_PENDING,
                         BigDecimal.ZERO,
                         firstReservationId(reservedItems),
                         null,
@@ -133,15 +150,22 @@ public class OrderSagaService {
                     || !quantity.equals(reservation.quantity())
                     || reservation.status() != ReservationStatus.HELD) {
 
-                    log.error("Informations de réservation invalides : {}", reservation);
+                    log.error(
+                        "Informations de réservation invalides : {}",
+                        reservation
+                    );
 
                     reservedItems.add(reservation);
 
-                    boolean released = releaseReservations(reservedItems, orderId);
+                    boolean released = releaseReservations(
+                        reservedItems, orderId
+                    );
 
                     return result(
                         orderId,
-                        released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                        released
+                            ? OrderStatus.REJECTED
+                            : OrderStatus.COMPENSATION_PENDING,
                         BigDecimal.ZERO,
                         firstReservationId(reservedItems),
                         null,
@@ -169,11 +193,15 @@ public class OrderSagaService {
                     exception
                 );
 
-                boolean released = releaseReservations(reservedItems, orderId);
+                boolean released = releaseReservations(
+                    reservedItems, orderId
+                );
 
                 return result(
                     orderId,
-                    released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                    released
+                        ? OrderStatus.REJECTED
+                        : OrderStatus.COMPENSATION_PENDING,
                     BigDecimal.ZERO,
                     firstReservationId(reservedItems),
                     null,
@@ -188,19 +216,34 @@ public class OrderSagaService {
         BigDecimal totalAmount;
 
         try {
-            totalAmount = calculateTotal(requestedQuantities, reservedItems);
+            totalAmount = calculateTotal(
+                requestedQuantities,
+                reservedItems
+            );
 
-            log.info("Montant total calculé : orderId={}, amount={}", orderId, totalAmount);
+            log.info(
+                "Montant total calculé : orderId={}, amount={}",
+                orderId,
+                totalAmount
+            );
 
         } catch (RuntimeException exception) {
 
-            log.error("ERREUR CALCUL MONTANT : orderId={}", orderId, exception);
+            log.error(
+                "ERREUR CALCUL MONTANT : orderId={}",
+                orderId,
+                exception
+            );
 
-            boolean released = releaseReservations(reservedItems, orderId);
+            boolean released = releaseReservations(
+                reservedItems, orderId
+            );
 
             return result(
                 orderId,
-                released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                released
+                    ? OrderStatus.REJECTED
+                    : OrderStatus.COMPENSATION_PENDING,
                 BigDecimal.ZERO,
                 firstReservationId(reservedItems),
                 null,
@@ -214,7 +257,11 @@ public class OrderSagaService {
         PaymentResponse payment;
 
         try {
-            log.info("Paiement demandé : orderId={}, amount={}", orderId, totalAmount);
+            log.info(
+                "Paiement demandé : orderId={}, amount={}",
+                orderId,
+                totalAmount
+            );
 
             payment = paymentClient.pay(
                 new PaymentRequest(orderId, totalAmount)
@@ -222,13 +269,21 @@ public class OrderSagaService {
 
         } catch (RuntimeException exception) {
 
-            log.error("ERREUR APPEL PAIEMENT : orderId={}", orderId, exception);
+            log.error(
+                "ERREUR APPEL PAIEMENT : orderId={}",
+                orderId,
+                exception
+            );
 
-            boolean released = releaseReservations(reservedItems, orderId);
+            boolean released = releaseReservations(
+                reservedItems, orderId
+            );
 
             return result(
                 orderId,
-                released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                released
+                    ? OrderStatus.REJECTED
+                    : OrderStatus.COMPENSATION_PENDING,
                 totalAmount,
                 firstReservationId(reservedItems),
                 null,
@@ -244,11 +299,15 @@ public class OrderSagaService {
 
             log.error("PAIEMENT REFUSÉ : orderId={}", orderId);
 
-            boolean released = releaseReservations(reservedItems, orderId);
+            boolean released = releaseReservations(
+                reservedItems, orderId
+            );
 
             return result(
                 orderId,
-                released ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                released
+                    ? OrderStatus.REJECTED
+                    : OrderStatus.COMPENSATION_PENDING,
                 totalAmount,
                 firstReservationId(reservedItems),
                 null,
@@ -260,7 +319,11 @@ public class OrderSagaService {
 
         Long paymentId = payment.paymentId();
 
-        log.info("Paiement accepté : orderId={}, paymentId={}", orderId, paymentId);
+        log.info(
+            "Paiement accepté : orderId={}, paymentId={}",
+            orderId,
+            paymentId
+        );
 
         // ÉTAPE 6 : Confirmer chaque réservation auprès de M2
         boolean allConfirmed = true;
@@ -287,7 +350,9 @@ public class OrderSagaService {
                     "Réponse confirmation : orderId={}, categoryId={}, status={}",
                     orderId,
                     item.categoryId(),
-                    confirmation == null ? "NULL" : confirmation.status()
+                    confirmation == null
+                        ? "NULL"
+                        : confirmation.status()
                 );
 
                 if (confirmation == null
@@ -319,7 +384,10 @@ public class OrderSagaService {
 
         if (!allConfirmed) {
 
-            log.error("Échec confirmation : lancement compensation, orderId={}", orderId);
+            log.error(
+                "Échec confirmation : lancement compensation, orderId={}",
+                orderId
+            );
 
             boolean compensated = compensate(
                 reservedItems,
@@ -329,7 +397,9 @@ public class OrderSagaService {
 
             return result(
                 orderId,
-                compensated ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                compensated
+                    ? OrderStatus.REJECTED
+                    : OrderStatus.COMPENSATION_PENDING,
                 totalAmount,
                 firstReservationId(reservedItems),
                 paymentId,
@@ -339,30 +409,45 @@ public class OrderSagaService {
             );
         }
 
-        // ÉTAPE 7 : Générer les billets (M5)
+        // ÉTAPE 7 : Générer les billets auprès de M5
         TicketResponse tickets;
 
         try {
-            log.info("Émission des billets demandée : orderId={}", orderId);
+            log.info(
+                "Émission des billets demandée : orderId={}, quantity={}",
+                orderId,
+                totalQuantity
+            );
 
             tickets = ticketClient.issueTickets(
                 new TicketRequest(
                     orderId,
+                    request.eventId(),
                     request.userId(),
-                    request.eventId()
+                    totalQuantity
                 )
             );
 
         } catch (RuntimeException exception) {
 
-            log.error("ERREUR ÉMISSION BILLETS : orderId={}", orderId, exception);
+            log.error(
+                "ERREUR ÉMISSION BILLETS : orderId={}",
+                orderId,
+                exception
+            );
 
             tickets = null;
         }
 
-        if (tickets == null || !tickets.successful()) {
+        if (tickets == null
+            || !tickets.successful()
+            || tickets.ticketIds() == null
+            || tickets.ticketIds().isEmpty()) {
 
-            log.error("Émission des billets échouée : orderId={}", orderId);
+            log.error(
+                "Émission des billets échouée : orderId={}",
+                orderId
+            );
 
             boolean compensated = compensate(
                 reservedItems,
@@ -372,7 +457,9 @@ public class OrderSagaService {
 
             return result(
                 orderId,
-                compensated ? OrderStatus.REJECTED : OrderStatus.COMPENSATION_PENDING,
+                compensated
+                    ? OrderStatus.REJECTED
+                    : OrderStatus.COMPENSATION_PENDING,
                 totalAmount,
                 firstReservationId(reservedItems),
                 paymentId,
@@ -391,7 +478,7 @@ public class OrderSagaService {
             totalAmount,
             firstReservationId(reservedItems),
             paymentId,
-            tickets.ticketIds() == null ? List.of() : tickets.ticketIds(),
+            tickets.ticketIds(),
             reservedItems,
             "Commande confirmée avec succès"
         );
@@ -420,7 +507,9 @@ public class OrderSagaService {
                 || item.unitPrice() == null
                 || item.unitPrice().compareTo(BigDecimal.ZERO) < 0) {
 
-                throw new IllegalStateException("Prix ou quantité invalide");
+                throw new IllegalStateException(
+                    "Prix ou quantité invalide"
+                );
             }
 
             reservedQuantities.merge(
@@ -461,7 +550,10 @@ public class OrderSagaService {
                     item.categoryId()
                 );
 
-                eventClient.releaseReservation(item.categoryId(), orderId);
+                eventClient.releaseReservation(
+                    item.categoryId(),
+                    orderId
+                );
 
             } catch (RuntimeException exception) {
 
@@ -488,26 +580,41 @@ public class OrderSagaService {
         boolean refundOk;
 
         try {
-            log.info("Remboursement demandé : paymentId={}", paymentId);
+            log.info(
+                "Remboursement demandé : paymentId={}",
+                paymentId
+            );
 
             refundOk = paymentClient.refund(paymentId);
 
-            log.info("Résultat remboursement : paymentId={}, success={}", paymentId, refundOk);
+            log.info(
+                "Résultat remboursement : paymentId={}, success={}",
+                paymentId,
+                refundOk
+            );
 
         } catch (RuntimeException exception) {
 
-            log.error("ERREUR REMBOURSEMENT : paymentId={}", paymentId, exception);
+            log.error(
+                "ERREUR REMBOURSEMENT : paymentId={}",
+                paymentId,
+                exception
+            );
 
             refundOk = false;
         }
 
-        boolean releaseOk = releaseReservations(reservedItems, orderId);
+        boolean releaseOk = releaseReservations(
+            reservedItems,
+            orderId
+        );
 
         return refundOk && releaseOk;
     }
 
     // Conserver le premier ID pour compatibilité avec SagaResult
-    private Long firstReservationId(List<SeatReservationResponse> items) {
+    private Long firstReservationId(
+        List<SeatReservationResponse> items) {
 
         if (items == null || items.isEmpty()) {
             return null;
@@ -523,7 +630,7 @@ public class OrderSagaService {
         BigDecimal amount,
         Long reservationId,
         Long paymentId,
-        List<Long> ticketIds,
+        List<String> ticketIds,
         List<SeatReservationResponse> reservedItems,
         String message) {
 

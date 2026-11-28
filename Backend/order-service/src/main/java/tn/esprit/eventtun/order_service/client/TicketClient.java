@@ -1,4 +1,3 @@
-
 package tn.esprit.eventtun.order_service.client;
 
 import tn.esprit.eventtun.order_service.client.ExternalServiceDtos.TicketRequest;

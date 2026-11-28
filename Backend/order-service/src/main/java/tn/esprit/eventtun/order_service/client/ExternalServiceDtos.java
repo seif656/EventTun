@@ -53,13 +53,25 @@ public class ExternalServiceDtos {
     // Requête envoyée au Ticket Service (M5)
     public record TicketRequest(
         Long orderId,
-        Long userId,
-        Long eventId
+        Long eventId,
+        Long ownerId,
+        Integer quantity
     ) {}
 
-    // Réponse du Ticket Service (M5)
+    // Informations d'un billet retourné par M5
+    public record TicketInfo(
+        String id,
+        Long orderId,
+        Long eventId,
+        Long ownerId,
+        String uniqueCode,
+        String status,
+        LocalDateTime issuedAt
+    ) {}
+
+    // Réponse adaptée pour la Saga M3
     public record TicketResponse(
         boolean successful,
-        List<Long> ticketIds
+        List<String> ticketIds
     ) {}
 }

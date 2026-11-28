@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -111,7 +112,7 @@ class OrderSagaServiceTest {
         when(ticketClient.issueTickets(any(TicketRequest.class)))
             .thenReturn(new TicketResponse(
                 true,
-                List.of(1001L, 1002L)
+                List.of("ticket-1001", "ticket-1002")
             ));
 
         OrderSagaService.SagaResult result =
@@ -122,20 +123,33 @@ class OrderSagaServiceTest {
         assertEquals(new BigDecimal("50.00"), result.totalAmount());
         assertEquals(100L, result.reservationId());
         assertEquals(200L, result.paymentId());
-        assertEquals(List.of(1001L, 1002L), result.ticketIds());
+
+        assertEquals(
+            List.of("ticket-1001", "ticket-1002"),
+            result.ticketIds()
+        );
 
         verify(userClient).getUser(1L);
+
         verify(eventClient).reserveSeats(
             eq(1L),
             any(ReservationRequest.class)
         );
+
         verify(paymentClient).pay(any(PaymentRequest.class));
+
         verify(eventClient).confirmReservation(
             eq(1L),
             eq(10L),
             any(ReservationStatusUpdateRequest.class)
         );
-        verify(ticketClient).issueTickets(any(TicketRequest.class));
+
+        verify(ticketClient).issueTickets(argThat(ticketRequest ->
+            ticketRequest.orderId().equals(10L)
+                && ticketRequest.eventId().equals(1L)
+                && ticketRequest.ownerId().equals(1L)
+                && ticketRequest.quantity().equals(2)
+        ));
 
         verify(paymentClient, never()).refund(anyLong());
     }
@@ -181,7 +195,9 @@ class OrderSagaServiceTest {
             eq(1L),
             any(ReservationRequest.class)
         );
+
         verify(paymentClient).pay(any(PaymentRequest.class));
+
         verify(eventClient).releaseReservation(1L, 12L);
 
         verify(eventClient, never()).confirmReservation(
@@ -189,7 +205,10 @@ class OrderSagaServiceTest {
             anyLong(),
             any(ReservationStatusUpdateRequest.class)
         );
-        verify(ticketClient, never()).issueTickets(any(TicketRequest.class));
+
+        verify(ticketClient, never())
+            .issueTickets(any(TicketRequest.class));
+
         verify(paymentClient, never()).refund(anyLong());
     }
 
